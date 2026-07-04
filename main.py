@@ -1,7 +1,6 @@
+import os
 import discord
 from discord.ext import commands
-import os
-import database # File database.py của bạn
 from flask import Flask
 from threading import Thread
 
@@ -24,18 +23,16 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    database.init_db() # Khởi tạo database khi bot sẵn sàng
     print(f'Bot đã đăng nhập thành công: {bot.user}')
 
-# 3. Các lệnh của bot
-@bot.command()
-async def bal(ctx):
-    balance = database.get_balance(ctx.author.id)
-    await ctx.send(f"💰 Số dư của bạn: **{balance} coins**")
-
-# 4. Chạy cả Web Server và Bot Discord cùng lúc
+# 3. Chạy cả Web Server và Bot Discord cùng lúc
 if __name__ == "__main__":
     # Chạy Flask ở một luồng riêng để không chặn Bot
     Thread(target=run_web).start()
+    
     # Chạy bot với token từ biến môi trường
-    bot.run(os.environ['DISCORD_TOKEN'])
+    token = os.environ.get("DISCORD_TOKEN")
+    if token:
+        bot.run(token)
+    else:
+        print("LỖI: Chưa có DISCORD_TOKEN trong biến môi trường!")
