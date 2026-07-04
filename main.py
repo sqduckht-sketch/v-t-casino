@@ -11,9 +11,10 @@ app = Flask(__name__)
 def home():
     return "Bot is alive!"
 
+# Hàm chạy web server - ĐƯỢC GỌI TRƯỚC
 def run_web():
-    # Sử dụng cổng được Render cấp (biến môi trường PORT)
     port = int(os.environ.get("PORT", 10000))
+    # Phải bind vào 0.0.0.0
     app.run(host='0.0.0.0', port=port)
 
 # Khởi tạo Bot Discord
@@ -23,16 +24,14 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f'Bot đã đăng nhập thành công: {bot.user}')
+    print(f'Bot đã đăng nhập: {bot.user}')
 
-# Chạy cả web và bot
+# Chạy bot
 if __name__ == "__main__":
-    # Chạy Web Server trong một luồng riêng
-    Thread(target=run_web).start()
+    # Chạy web server trong luồng riêng
+    web_thread = Thread(target=run_web)
+    web_thread.daemon = True
+    web_thread.start()
     
-    # Chạy bot với token
-    token = os.environ.get("DISCORD_TOKEN")
-    if token:
-        bot.run(token)
-    else:
-        print("LỖI: Chưa có DISCORD_TOKEN!")
+    # Chạy bot
+    bot.run(os.environ['DISCORD_TOKEN'])
