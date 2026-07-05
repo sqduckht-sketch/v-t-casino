@@ -9,21 +9,59 @@ const User = mongoose.model('User', userSchema);
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] });
 const ADMIN_ID = '1126092277220122634';
 
+let isBettingOpen = false;
+let bets = []; 
+
 function formatMoney(amount) { return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-    const userId = message.author.id;
-    let user = await User.findOne({ userId: userId }) || await User.create({ userId: userId });
     const args = message.content.split(' ');
     const command = args[0];
+    const userId = message.author.id;
+    let user = await User.findOne({ userId: userId }) || await User.create({ userId: userId });
+
+    // Lệnh Tài Xỉu phiên 30s
+    if (command === '!tx') {
+        if (isBettingOpen) return message.reply("Đang có phiên Tài Xỉu diễn ra!");
+        isBettingOpen = true; bets = [];
+        const msg = await message.channel.send("🎲 **TÀI XỈU MỞ BÁT!** Gõ `!dat <tai/xiu> <số_tiền>` để đặt cược trong 30 giây!");
+        let cd = 30;
+        const timer = setInterval(async () => {
+            cd--;
+            if (cd > 0) msg.edit(`🎲 **Đang chờ đặt cược... ${cd}s**\nSố người tham gia: ${bets.length}`);
+            else {
+                clearInterval(timer); isBettingOpen = false;
+                msg.edit("🎲 **Hết giờ! Đang quay xúc xắc...**");
+                const d = [Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1];
+                const total = d[0]+d[1]+d[2];
+                const res = (total >= 11) ? 'tai' : 'xiu';
+                let ketQua = `Kết quả: ${d[0]}-${d[1]}-${d[2]} (**${total}** - ${res.toUpperCase()})\n`;
+                for (let b of bets) {
+                    let u = await User.findOne({ userId: b.userId });
+                    if (b.choice === res) { u.balance += (b.amount * 2); ketQua += `<@${b.userId}> thắng ${formatMoney(b.amount * 2)} xu!\n`; }
+                    else { ketQua += `<@${b.userId}> thua ${formatMoney(b.amount)} xu.\n`; }
+                    await u.save();
+                }
+                message.channel.send(ketQua);
+            }
+        }, 1000);
+    }
+
+    if (command === '!dat') {
+        if (!isBettingOpen) return message.reply("Hiện không có phiên nào mở!");
+        const choice = args[1]?.toLowerCase(); const amount = parseInt(args[2]);
+        if (!['tai', 'xiu'].includes(choice) || !amount || amount > user.balance || amount <= 0) return message.reply("Cú pháp: `!dat <tai/xiu> <số_tiền>`");
+        user.balance -= amount; await user.save();
+        bets.push({ userId, choice, amount });
+        message.reply(`✅ Đã đặt ${formatMoney(amount)} xu vào **${choice.toUpperCase()}**.`);
+    }
 
     if (command === '!balance') message.reply(`Số dư của bạn: **${formatMoney(user.balance)} xu**`);
 
     if (command === '!chuyen') {
-        const target = message.mentions.users.first();
-        const amount = parseInt(args[2]);
-        if (!target || !amount || user.balance < amount) return message.reply("Lỗi: Số tiền không hợp lệ hoặc không đủ tiền!");
+        const target = message.mentions.users.first(); const amount = parseInt(args[2]);
+        if (!target || !amount || user.balance < amount) return message.reply("Lỗi: Số tiền hoặc người nhận không hợp lệ!");
         user.balance -= amount; await user.save();
         let tUser = await User.findOne({ userId: target.id }) || await User.create({ userId: target.id });
         tUser.balance += amount; await tUser.save();
@@ -31,8 +69,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (command === '!admin_add' && userId === ADMIN_ID) {
-        const target = message.mentions.users.first();
-        const amount = parseInt(args[2]);
+        const target = message.mentions.users.first(); const amount = parseInt(args[2]);
         let tUser = await User.findOne({ userId: target.id }) || await User.create({ userId: target.id });
         tUser.balance += amount; await tUser.save();
         message.reply(`👑 Admin đã cộng ${formatMoney(amount)} xu cho ${target.username}!`);
@@ -61,23 +98,6 @@ client.on('messageCreate', async (message) => {
         user.balance += global.lixiAmount; await user.save();
         message.reply(`🎉 Chúc mừng! Bạn nhận được ${formatMoney(global.lixiAmount)} xu!`);
         global.lixiCode = null;
-    }
-
-    if (command === '!tx') {
-        const choice = args[1]?.toLowerCase();
-        const amount = parseInt(args[2]);
-        if (!['tai', 'xiu'].includes(choice) || !amount || amount > user.balance || amount <= 0) return message.reply("Cú pháp: `!tx <tai/xiu> <số_tiền>`");
-        user.balance -= amount; await user.save();
-        const msg = await message.reply("🎲 Đang lắc xúc xắc... 3");
-        let cd = 3;
-        const timer = setInterval(() => { cd--; if(cd > 0) msg.edit(`🎲 Đang lắc xúc xắc... ${cd}`); else clearInterval(timer); }, 1000);
-        setTimeout(async () => {
-            const d = [Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1];
-            const total = d[0]+d[1]+d[2];
-            const res = (total >= 11) ? 'tai' : 'xiu';
-            if (res === choice) { user.balance += (amount * 2); await user.save(); msg.edit(`Kết quả: ${d[0]} ${d[1]} ${d[2]} (**${total}** - ${res.toUpperCase()})\n🎉 Thắng **${formatMoney(amount*2)} xu**!`); }
-            else msg.edit(`Kết quả: ${d[0]} ${d[1]} ${d[2]} (**${total}** - ${res.toUpperCase()})\n😭 Thua rồi!`);
-        }, 3000);
     }
 });
 
