@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 
 const client = new Client({ 
     intents: [
@@ -21,64 +21,59 @@ client.on('messageCreate', async (message) => {
     const args = message.content.split(' ');
     const command = args[0];
 
-    // Lệnh cơ bản
     if (command === '!balance') {
         message.reply(`Số dư của bạn: **${db[userId].balance} xu**`);
     }
 
-    if (command === '!daily') {
-        db[userId].balance += 50;
-        message.reply("Bạn đã nhận được 50 xu miễn phí!");
-    }
-
-    // Lệnh Tài Xỉu
     if (command === '!tx') {
-        if (isBettingOpen) return message.reply("Phiên tài xỉu đang diễn ra, hãy đặt cược bằng lệnh `!dat <tai/xiu> <số tiền>`");
+        if (isBettingOpen) return message.reply("Phiên đang mở, hãy dùng `!dat <tai/xiu> <tien>`");
         
         isBettingOpen = true;
         bets = {}; 
-        message.channel.send("🎲 **PHIÊN TÀI XỈU ĐÃ MỞ!** Mọi người có 30 giây để đặt cược bằng lệnh `!dat <tai/xiu> <số tiền>`");
+        message.channel.send("🎲 **PHIÊN TÀI XỈU (30s):** Đặt cược bằng `!dat tai 100` hoặc `!dat xiu 100`");
 
         setTimeout(async () => {
             isBettingOpen = false;
-            message.channel.send("⏳ Đã hết giờ! Đang tung xúc xắc...");
-
             const d1 = Math.floor(Math.random() * 6) + 1;
             const d2 = Math.floor(Math.random() * 6) + 1;
             const d3 = Math.floor(Math.random() * 6) + 1;
             const total = d1 + d2 + d3;
             const result = (total >= 11) ? 'tai' : 'xiu';
 
-            let resultMessage = `Kết quả: **${d1} - ${d2} - ${d3} (Tổng: ${total} - ${result.toUpperCase()})**\n\n`;
-
+            let winnerList = "";
             for (const uid in bets) {
                 if (bets[uid].choice === result) {
                     db[uid].balance += bets[uid].amount;
-                    resultMessage += `<@${uid}> thắng ${bets[uid].amount} xu! (Tổng: ${db[uid].balance})\n`;
+                    winnerList += `<@${uid}>: +${bets[uid].amount}\n`;
                 } else {
                     db[uid].balance -= bets[uid].amount;
-                    resultMessage += `<@${uid}> thua ${bets[uid].amount} xu! (Tổng: ${db[uid].balance})\n`;
+                    winnerList += `<@${uid}>: -${bets[uid].amount}\n`;
                 }
             }
-            message.channel.send(resultMessage);
+
+            const embed = new EmbedBuilder()
+                .setColor(result === 'tai' ? 0xFF0000 : 0x00FF00)
+                .setTitle('🎲 KẾT QUẢ TÀI XỈU')
+                .setDescription(`Kết quả: **${d1} - ${d2} - ${d3}**\nTổng: **${total} (${result.toUpperCase()})**`)
+                .addFields({ name: 'Kết quả người chơi', value: winnerList || "Không có người đặt" })
+                .setTimestamp();
+
+            message.channel.send({ embeds: [embed] });
         }, 30000); 
     }
 
     if (command === '!dat') {
-        if (!isBettingOpen) return message.reply("Hiện không có phiên nào đang mở!");
-        const choice = args[1];
+        if (!isBettingOpen) return message.reply("Không có phiên nào đang mở!");
+        const choice = args[1]?.toLowerCase();
         const amount = parseInt(args[2]);
-        if (!db[userId] || db[userId].balance < amount) return message.reply("Bạn không đủ tiền!");
+        if (!choice || !amount || db[userId].balance < amount) return message.reply("Sai cú pháp hoặc không đủ tiền!");
         
         bets[userId] = { choice, amount };
-        message.reply(`Đã nhận cược: **${amount} xu** vào **${choice}**`);
+        message.reply(`✅ Đã nhận ${amount} xu vào ${choice.toUpperCase()}`);
     }
 });
 
 client.login(process.env.DISCORD_TOKEN);
 
 const http = require('http');
-http.createServer((req, res) => {
-  res.write("Bot is alive!");
-  res.end();
-}).listen(process.env.PORT || 3000);
+http.createServer((req, res) => res.end("Bot is alive!")).listen(process.env.PORT || 3000);
