@@ -11,6 +11,8 @@ const ADMIN_ID = '1126092277220122634';
 
 let isBettingOpen = false;
 let bets = []; 
+let huValue = 1000; // Hũ mặc định 1000
+const dailyCooldowns = new Map(); 
 
 function formatMoney(amount) { return amount.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
 
@@ -21,28 +23,52 @@ client.on('messageCreate', async (message) => {
     const userId = message.author.id;
     let user = await User.findOne({ userId: userId }) || await User.create({ userId: userId });
 
+    // --- CÁC LỆNH CŨ & MỚI ---
+
+    if (command === '!daily') {
+        const lastDaily = dailyCooldowns.get(userId);
+        const now = Date.now();
+        const eightHours = 8 * 60 * 60 * 1000;
+        if (lastDaily && (now - lastDaily) < eightHours) {
+            const timeLeft = Math.ceil((eightHours - (now - lastDaily)) / (3600000));
+            return message.reply(`⏰ Bạn đã nhận rồi! Hãy quay lại sau ${timeLeft} giờ nữa.`);
+        }
+        user.balance += 200; await user.save();
+        dailyCooldowns.set(userId, now);
+        message.reply(`🎁 Chúc mừng! Bạn đã nhận **200 xu** điểm danh. Hẹn gặp lại sau 8 giờ!`);
+    }
+
     if (command === '!tx') {
         if (isBettingOpen) return message.reply("Đang có phiên Tài Xỉu diễn ra!");
         isBettingOpen = true; bets = [];
-        const msg = await message.channel.send("🎲 **TÀI XỈU MỞ BÁT!** Gõ `!dat <tai/xiu> <số_tiền>` để đặt cược trong 30 giây!");
+        const msg = await message.channel.send("🎲 **TÀI XỈU MỞ BÁT!** Gõ `!dat <tai/xiu> <số_tiền>` trong 30 giây!");
         let cd = 30;
         const timer = setInterval(async () => {
             cd--;
             if (cd > 0) msg.edit(`🎲 **Đang chờ đặt cược... ${cd}s**\nSố người tham gia: ${bets.length}`);
             else {
                 clearInterval(timer); isBettingOpen = false;
-                msg.edit("🎲 **Hết giờ! Đang quay xúc xắc...**");
                 const d = [Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1, Math.floor(Math.random()*6)+1];
                 const total = d[0]+d[1]+d[2];
                 const res = (total >= 11) ? 'tai' : 'xiu';
                 let ketQua = `Kết quả: ${d[0]}-${d[1]}-${d[2]} (**${total}** - ${res.toUpperCase()})\n`;
-                for (let b of bets) {
-                    let u = await User.findOne({ userId: b.userId });
-                    if (b.choice === res) { u.balance += (b.amount * 2); ketQua += `<@${b.userId}> thắng ${formatMoney(b.amount * 2)} xu!\n`; }
-                    else { ketQua += `<@${b.userId}> thua ${formatMoney(b.amount)} xu.\n`; }
-                    await u.save();
+                
+                if (d[0] === d[1] && d[1] === d[2]) {
+                    ketQua += `🎉 **NỔ HŨ!!!** 🎉 Người chơi được chia: ${formatMoney(huValue)} xu!\n`;
+                    for (let b of bets) {
+                        let u = await User.findOne({ userId: b.userId });
+                        u.balance += Math.floor(huValue / bets.length); await u.save();
+                    }
+                    huValue = 1000;
+                } else {
+                    for (let b of bets) {
+                        let u = await User.findOne({ userId: b.userId });
+                        if (b.choice === res) { u.balance += (b.amount * 2); ketQua += `<@${b.userId}> thắng ${formatMoney(b.amount * 2)} xu!\n`; }
+                        else { huValue += Math.floor(b.amount * 0.05); ketQua += `<@${b.userId}> thua ${formatMoney(b.amount)} xu.\n`; }
+                        await u.save();
+                    }
                 }
-                message.channel.send(ketQua);
+                message.channel.send(ketQua + `💰 **Hũ hiện tại:** ${formatMoney(huValue)} xu`);
             }
         }, 1000);
     }
@@ -57,6 +83,7 @@ client.on('messageCreate', async (message) => {
     }
 
     if (command === '!balance') message.reply(`Số dư của bạn: **${formatMoney(user.balance)} xu**`);
+    if (command === '!hu') message.reply(`💰 **Giá trị Hũ hiện tại:** ${formatMoney(huValue)} xu`);
 
     if (command === '!chuyen') {
         const target = message.mentions.users.first(); const amount = parseInt(args[2]);
@@ -101,11 +128,5 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-
-// Server Keep-alive để Render không báo lỗi
 const http = require('http');
-const server = http.createServer((req, res) => { 
-    res.writeHead(200); 
-    res.end('Bot is active'); 
-});
-server.listen(process.env.PORT || 3000);
+http.createServer((req, res) => { res.writeHead(200); res.end('Bot is active'); }).listen(process.env.PORT || 3000);
