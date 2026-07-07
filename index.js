@@ -103,4 +103,18 @@ client.on('messageCreate', async (message) => {
 
 client.login(process.env.DISCORD_TOKEN);
 const http = require('http');
-http.createServer((req, res) => res.end('Running')).listen(process.env.PORT || 3000);
+// ... giữ nguyên toàn bộ phần code phía trên ...
+
+client.login(process.env.DISCORD_TOKEN);
+
+// Thay thế đoạn http.createServer cũ bằng đoạn này để bot tự ping chính nó
+const http = require('http');
+const keepAlive = () => {
+    http.get(`https://${process.env.RENDER_EXTERNAL_HOSTNAME}`, (res) => {
+        console.log('Bot đã tự ping chính mình để không bị ngủ!');
+    });
+};
+setInterval(keepAlive, 300000); // Ping mỗi 5 phút (300,000ms)
+
+http.createServer((req, res) => res.end('Bot is running!')).listen(process.env.PORT || 3000);
+
