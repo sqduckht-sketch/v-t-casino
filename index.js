@@ -100,14 +100,12 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Đăng nhập 1 lần duy nhất
 client.login(process.env.DISCORD_TOKEN);
 
-// Server Keep-alive để tránh bị ngủ
+// Server Keep-alive để Render không báo lỗi
 const http = require('http');
-const server = http.createServer((req, res) => { res.writeHead(200); res.end('Bot is running!'); });
+const server = http.createServer((req, res) => { 
+    res.writeHead(200); 
+    res.end('Bot is active'); 
+});
 server.listen(process.env.PORT || 3000);
-
-setInterval(() => {
-    http.get(`http://localhost:${process.env.PORT || 3000}/`, () => console.log('Pinged'));
-}, 300000);
