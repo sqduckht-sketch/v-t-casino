@@ -21,7 +21,6 @@ client.on('messageCreate', async (message) => {
     const userId = message.author.id;
     let user = await User.findOne({ userId: userId }) || await User.create({ userId: userId });
 
-    // Lệnh Tài Xỉu phiên 30s
     if (command === '!tx') {
         if (isBettingOpen) return message.reply("Đang có phiên Tài Xỉu diễn ra!");
         isBettingOpen = true; bets = [];
@@ -101,20 +100,14 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.login(process.env.DISCORD_TOKEN);
-const http = require('http');
-// ... giữ nguyên toàn bộ phần code phía trên ...
-
+// Đăng nhập 1 lần duy nhất
 client.login(process.env.DISCORD_TOKEN);
 
-// Thay thế đoạn http.createServer cũ bằng đoạn này để bot tự ping chính nó
+// Server Keep-alive để tránh bị ngủ
 const http = require('http');
-const keepAlive = () => {
-    http.get(`https://${process.env.RENDER_EXTERNAL_HOSTNAME}`, (res) => {
-        console.log('Bot đã tự ping chính mình để không bị ngủ!');
-    });
-};
-setInterval(keepAlive, 300000); // Ping mỗi 5 phút (300,000ms)
+const server = http.createServer((req, res) => { res.writeHead(200); res.end('Bot is running!'); });
+server.listen(process.env.PORT || 3000);
 
-http.createServer((req, res) => res.end('Bot is running!')).listen(process.env.PORT || 3000);
-
+setInterval(() => {
+    http.get(`http://localhost:${process.env.PORT || 3000}/`, () => console.log('Pinged'));
+}, 300000);
